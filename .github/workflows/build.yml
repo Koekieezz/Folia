@@ -2,7 +2,8 @@ name: Patch and Build
 
 on:
   push:
-    branches: [ "**" ]
+  workflow_dispatch:
+    branches: [ "master" ]
   pull_request:
 
 jobs:
@@ -12,19 +13,56 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Git Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4.1.2
+
       - name: Validate Gradle wrapper
-        uses: gradle/wrapper-validation-action@v1
+        uses: gradle/wrapper-validation-action@main
+
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/gradle-build-action@main
+
       - name: Set up JDK
-        uses: actions/setup-java@v3
+        uses: graalvm/setup-graalvm@main
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          version: 22.3.5
+          java-version: 17
+          distribution: graalvm
+          cache: gradle
+
       - name: Configure Git User Details
         run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions"
+
+      - name: make gradle wrapper executable
+        run: chmod +x ./gradlew
+        
       - name: Apply Patches
         run: ./gradlew applyPatches
+
+      - name: Compress All Files
+        run: tar -cvf project.tar ./*
+
       - name: Build
         run: ./gradlew build
+
+      - name: publishToMavenLocal
+        run: ./gradlew publishToMavenLocal
+
+      - name: createMojmapPaperclipJar
+        run: ./gradlew createMojmapPaperclipJar
+
+      - name: Upload jar
+        uses: actions/upload-artifact@main
+        with:
+          name: FoilaBuild
+          path: |
+            build/libs/
+          compression-level: 9
+
+      - name: Generate Build Summary
+        uses: actions/github-script@main
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run_id = context.runId;
+            core.summary
+              .write()
